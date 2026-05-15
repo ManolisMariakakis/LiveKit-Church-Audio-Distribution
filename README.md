@@ -2,7 +2,7 @@
 
 Low-latency local-network church audio distribution using:
 
-- LiveKit SFU ([LiveKit SFU](https://livekit.io), [LiveKit GitHub Repository](https://github.com/livekit/livekit))
+- LiveKit Selective Forwarding Unit ([LiveKit SFU](https://livekit.io), [LiveKit GitHub Repository](https://github.com/livekit/livekit))
 - WebRTC
 - Node.js
 - Mobile-friendly web UI
