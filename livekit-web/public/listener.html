@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Translation Listener</title>
+
+<script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.js"></script>
+
+<link rel="manifest" href="/listener-manifest.json">
+<meta name="theme-color" content="#0f172a">
+
+<style>
+*{
+    box-sizing:border-box;
+}
+
+html, body{
+    margin:0;
+    padding:0;
+    width:100%;
+    min-height:100%;
+    font-family:Arial, sans-serif;
+    background:#0f172a;
+    color:#ffffff;
+}
+
+body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+}
+
+.app{
+    width:100%;
+    max-width:420px;
+    min-height:80vh;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    text-align:center;
+}
+
+.badge{
+    display:inline-block;
+    margin:0 auto 18px;
+    padding:8px 14px;
+    border-radius:999px;
+    background:#1e293b;
+    color:#93c5fd;
+    font-size:14px;
+    font-weight:700;
+    letter-spacing:.5px;
+}
+
+h1{
+    font-size:34px;
+    margin:0 0 12px;
+    font-weight:700;
+}
+
+.subtitle{
+    font-size:16px;
+    color:#cbd5e1;
+    margin-bottom:30px;
+}
+
+button{
+    width:100%;
+    padding:20px;
+    font-size:22px;
+    font-weight:700;
+    border:none;
+    border-radius:16px;
+    cursor:pointer;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);
+    margin-bottom:14px;
+}
+
+#connectBtn{
+    background:#38bdf8;
+    color:#082f49;
+}
+
+#disconnectBtn{
+    background:#ef4444;
+    color:#ffffff;
+}
+
+button:active{
+    transform:scale(.98);
+}
+
+button:disabled{
+    background:#64748b;
+    color:#cbd5e1;
+}
+
+#status{
+    margin-top:20px;
+    padding:16px;
+    border-radius:14px;
+    background:#1e293b;
+    color:#e2e8f0;
+    font-size:18px;
+    line-height:1.4;
+    min-height:56px;
+}
+
+.volume-container{
+    margin-top:20px;
+    text-align:left;
+}
+
+.volume-label{
+    margin-bottom:10px;
+    font-size:15px;
+    color:#cbd5e1;
+}
+
+input[type=range]{
+    width:100%;
+}
+
+@media (max-width:480px){
+
+    body{
+        padding:16px;
+    }
+
+    h1{
+        font-size:30px;
+    }
+
+    button{
+        font-size:20px;
+        padding:18px;
+    }
+
+    #status{
+        font-size:16px;
+        margin-bottom:20px;
+    }
+
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <div class="badge">Live Translation Listener</div>
+
+    <h1>Listener</h1>
+
+    <div class="subtitle">
+        Connect to hear the live translation
+    </div>
+
+    <button id="connectBtn">
+        Connect & Listen
+    </button>
+
+    <div class="volume-container">
+        <div class="volume-label">
+            Volume
+        </div>
+
+        <input
+            type="range"
+            id="volumeSlider"
+            min="0"
+            max="1"
+            step="0.01"
+            value="1"
+        >
+    </div>
+
+    <div id="status">Ready</div>
+
+    <button id="disconnectBtn" disabled>
+        Disconnect
+    </button>
+
+</div>
+
+<script>
+
+const SERVER_IP = 'XXX.XXX.XXX.XXX';
+
+const LIVEKIT_URL = `ws://${SERVER_IP}:7880`;
+
+const ROOM_NAME = 'translation-room';
+
+const statusDiv = document.getElementById('status');
+
+const connectBtn = document.getElementById('connectBtn');
+
+const disconnectBtn = document.getElementById('disconnectBtn');
+
+const volumeSlider = document.getElementById('volumeSlider');
+
+let room = null;
+
+let audioElement = null;
+
+connectBtn.onclick = async () => {
+
+    try {
+
+        connectBtn.disabled = true;
+
+        statusDiv.textContent = 'Getting token...';
+
+        const identity =
+            'listener-' + Math.random().toString(36).substring(2);
+
+        const response = await fetch(
+            `/token?room=${ROOM_NAME}&identity=${identity}`
+        );
+
+        const data = await response.json();
+
+        room = new LivekitClient.Room();
+
+        room.on(
+            LivekitClient.RoomEvent.TrackSubscribed,
+            (track) => {
+
+                if (track.kind === 'audio') {
+
+                    audioElement = track.attach();
+
+                    audioElement.style.display = 'none';
+
+                    audioElement.volume = volumeSlider.value;
+
+                    document.body.appendChild(audioElement);
+
+                    audioElement.play();
+
+                    statusDiv.textContent = 'Audio playing';
+
+                }
+
+            }
+        );
+
+        statusDiv.textContent = 'Connecting...';
+
+        await room.connect(LIVEKIT_URL, data.token);
+
+        statusDiv.textContent =
+            'Connected. Waiting for speaker...';
+
+        connectBtn.disabled = true;
+
+        disconnectBtn.disabled = false;
+
+    } catch(err) {
+
+        console.error(err);
+
+        statusDiv.textContent = 'ERROR: ' + err.message;
+
+        connectBtn.disabled = false;
+
+    }
+
+};
+
+disconnectBtn.onclick = async () => {
+
+    try {
+
+        if (room) {
+            room.disconnect();
+        }
+
+        if (audioElement) {
+            audioElement.pause();
+            audioElement.remove();
+            audioElement = null;
+        }
+
+        statusDiv.textContent = 'Disconnected';
+
+        connectBtn.disabled = false;
+
+        disconnectBtn.disabled = true;
+
+    } catch(err) {
+
+        console.error(err);
+
+    }
+
+};
+
+volumeSlider.oninput = () => {
+
+    if (audioElement) {
+        audioElement.volume = volumeSlider.value;
+    }
+
+};
+
+</script>
+
+</body>
+</html>

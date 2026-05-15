@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Translation Speaker </title>
+
+<script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.js"></script>
+
+<link rel="manifest" href="/speaker-manifest.json">
+<meta name="theme-color" content="#0f172a">
+
+<style>
+*{box-sizing:border-box}
+
+html,body{
+    margin:0;
+    padding:0;
+    width:100%;
+    min-height:100%;
+    font-family:Arial,sans-serif;
+    background:#0f172a;
+    color:#fff;
+}
+
+body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+}
+
+.app{
+    width:100%;
+    max-width:420px;
+    min-height:80vh;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    text-align:center;
+}
+
+.badge{
+    display:inline-block;
+    margin:0 auto 18px;
+    padding:8px 14px;
+    border-radius:999px;
+    background:#1e293b;
+    color:#93c5fd;
+    font-size:14px;
+    font-weight:700;
+}
+
+h1{
+    font-size:34px;
+    margin:0 0 12px;
+}
+
+.subtitle{
+    font-size:16px;
+    color:#cbd5e1;
+    margin-bottom:20px;
+}
+
+select{
+    width:100%;
+    padding:14px;
+    margin-bottom:14px;
+    border-radius:12px;
+    font-size:16px;
+    border:none;
+}
+
+button{
+    width:100%;
+    padding:20px;
+    font-size:22px;
+    font-weight:700;
+    border:none;
+    border-radius:16px;
+    cursor:pointer;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);
+    margin-bottom:14px;
+}
+
+button:active{
+    transform:scale(.98);
+}
+
+button:disabled{
+    background:#64748b!important;
+    color:#cbd5e1!important;
+}
+
+#refreshMicsBtn{
+    background:#475569;
+    color:#fff;
+}
+
+#startBtn{
+    background:#22c55e;
+    color:#052e16;
+}
+
+#pauseBtn{
+    background:#facc15;
+    color:#422006;
+}
+
+#resumeBtn{
+    background:#38bdf8;
+    color:#082f49;
+}
+
+#disconnectBtn{
+    background:#ef4444;
+    color:#fff;
+}
+
+#status{
+    /* margin-top:20px; */
+    padding:16px;
+    border-radius:14px;
+    background:#1e293b;
+    color:#e2e8f0;
+    font-size:18px;
+    line-height:1.4;
+    min-height:56px;
+}
+
+.mic-buttons{
+    display:flex;
+    gap:14px;
+    width:100%;
+    margin-bottom:14px;
+}
+
+.mic-buttons button{
+    flex:1;
+    margin-bottom:0;
+}
+
+.audio-options{
+    background:#1e293b;
+    border-radius:14px;
+    padding:14px;
+    margin-bottom:14px;
+    text-align:left;
+}
+
+.audio-options label{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:15px;
+    color:#e2e8f0;
+    margin:10px 0;
+}
+
+.audio-options input{
+    width:18px;
+    height:18px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <div class="badge">
+        Live Translation Speaker
+    </div>
+
+    <h1>Speaker</h1>
+
+    <div class="subtitle">
+        Select microphone and begin speaking
+    </div>
+
+    <select id="micSelect">
+        <option value="">
+            Loading microphones...
+        </option>
+    </select>
+
+    <button id="refreshMicsBtn">
+        Refresh Microphones
+    </button>
+
+    <div class="audio-options">
+        <label>
+            <input type="checkbox" id="echoCancellation">
+            Echo Cancellation
+        </label>
+
+        <label>
+            <input type="checkbox" id="noiseSuppression" checked>
+            Noise Suppression
+        </label>
+
+        <label>
+            <input type="checkbox" id="autoGainControl">
+            Auto Gain Control
+        </label>
+
+        <input
+            type="number"
+            id="noiseThreshold"
+            value="0.018"
+            step="0.001"
+            min="0"
+            max="1"
+            style="
+                width:100%;
+                padding:12px;
+                border-radius:10px;
+                border:none;
+                font-size:16px;
+                margin-top:6px;
+            "
+        >
+
+        <div style="
+            font-size:13px;
+            color:#94a3b8;
+            margin-top:6px;
+        ">
+            Noise Threshold, Default: 0,018
+        </div>
+    </div>
+
+    <button id="startBtn">
+        Start
+    </button>
+
+    <div class="mic-buttons">
+        <button id="pauseBtn" disabled>
+            Pause Mic
+        </button>
+
+        <button id="resumeBtn" disabled>
+            Resume
+        </button>
+    </div>
+
+    <button id="disconnectBtn" disabled>
+        Disconnect
+    </button>
+
+    <div id="status">
+        Ready
+    </div>
+
+</div>
+
+<script>
+const SERVER_IP = 'XXX.XXX.XXX.XXX';
+const LIVEKIT_URL = `ws://${SERVER_IP}:7880`;
+const ROOM_NAME = 'translation-room';
+
+const statusDiv = document.getElementById('status');
+const micSelect = document.getElementById('micSelect');
+const refreshMicsBtn = document.getElementById('refreshMicsBtn');
+const startBtn = document.getElementById('startBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const resumeBtn = document.getElementById('resumeBtn');
+const disconnectBtn = document.getElementById('disconnectBtn');
+const echoCancellationCheckbox = document.getElementById('echoCancellation');
+const noiseSuppressionCheckbox = document.getElementById('noiseSuppression');
+const autoGainControlCheckbox = document.getElementById('autoGainControl');
+const noiseThresholdInput = document.getElementById('noiseThreshold');
+
+let room = null;
+let audioTrack = null;
+let wakeLock = null;
+
+// ------------------------------------
+// LOAD MICROPHONES
+// ------------------------------------
+
+async function loadMicrophones() {
+
+    try {
+
+        statusDiv.textContent = 'Loading microphones...';
+
+        const tempStream = await navigator.mediaDevices.getUserMedia({
+            audio: true
+        });
+
+        tempStream.getTracks().forEach(track => track.stop());
+
+        const devices =
+            await navigator.mediaDevices.enumerateDevices();
+
+        const mics =
+            devices.filter(device => device.kind === 'audioinput');
+
+        micSelect.innerHTML = '';
+
+        if (!mics.length) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No microphones found';
+            micSelect.appendChild(option);
+
+            statusDiv.textContent = 'No microphones found';
+            return;
+        }
+
+        mics.forEach((device, index) => {
+
+            const option =
+                document.createElement('option');
+
+            option.value = device.deviceId;
+
+            option.textContent =
+                device.label || `Microphone ${index + 1}`;
+
+            micSelect.appendChild(option);
+
+        });
+
+        const preferred =
+            [...micSelect.options].find(option => {
+
+                const label =
+                    option.textContent.toLowerCase();
+
+                return (
+                    label.includes('rode') ||
+                    label.includes('røde') ||
+                    label.includes('wireless') ||
+                    label.includes('usb')
+                );
+
+            });
+
+        if (preferred) {
+            micSelect.value = preferred.value;
+        }
+
+        statusDiv.textContent =
+            'Microphones loaded. Selected: ' +
+            micSelect.options[micSelect.selectedIndex].textContent;
+
+    } catch(err) {
+
+        console.error(err);
+
+        statusDiv.textContent =
+            'Microphone permission required';
+
+    }
+
+}
+
+refreshMicsBtn.onclick = loadMicrophones;
+
+window.addEventListener('load', loadMicrophones);
+
+// ------------------------------------
+// START
+// ------------------------------------
+
+startBtn.onclick = async () => {
+
+    try {
+
+        startBtn.disabled = true;
+
+        statusDiv.textContent = 'Getting token...';
+
+        if ('wakeLock' in navigator) {
+            try {
+                wakeLock =
+                    await navigator.wakeLock.request('screen');
+            } catch(e) {
+                console.warn('Wake lock failed:', e);
+            }
+        }
+
+        const response = await fetch(
+            `/token?room=${ROOM_NAME}&identity=speaker`
+        );
+
+        if (!response.ok) {
+            throw new Error('Token request failed');
+        }
+
+        const data = await response.json();
+
+        room = new LivekitClient.Room();
+
+        statusDiv.textContent = 'Connecting...';
+
+        await room.connect(
+            LIVEKIT_URL,
+            data.token
+        );
+
+        const selectedMicId = micSelect.value;
+
+        statusDiv.textContent = 'Opening microphone...';
+
+        const audioOptions = {
+            deviceId: selectedMicId || undefined,
+            echoCancellation: echoCancellationCheckbox.checked,
+            noiseSuppression: noiseSuppressionCheckbox.checked,
+            autoGainControl: autoGainControlCheckbox.checked
+        };
+
+        try {
+
+            const rawStream = await navigator.mediaDevices.getUserMedia({
+                audio: audioOptions
+            });
+
+            const rawTrack = rawStream.getAudioTracks()[0];
+
+            const audioContext = new AudioContext();
+
+            const source = audioContext.createMediaStreamSource(rawStream);
+
+            // Κόβει χαμηλό βουητό
+            const highpass = audioContext.createBiquadFilter();
+            highpass.type = 'highpass';
+            highpass.frequency.value = 120;
+
+            // Noise Gate
+            const gate = audioContext.createGain();
+            const analyser = audioContext.createAnalyser();
+
+            analyser.fftSize = 2048;
+
+            const dataArray = new Uint8Array(analyser.fftSize);
+
+            const destination = audioContext.createMediaStreamDestination();
+
+            source.connect(highpass);
+            highpass.connect(analyser);
+            highpass.connect(gate);
+            gate.connect(destination);
+
+            const threshold = parseFloat(noiseThresholdInput.value) || 0.018;
+            const openGain = 1.0;
+            const closedGain = 0.0;
+
+            function updateGate() {
+
+                analyser.getByteTimeDomainData(dataArray);
+
+                let sum = 0;
+
+                for (let i = 0; i < dataArray.length; i++) {
+                    const value = (dataArray[i] - 128) / 128;
+                    sum += value * value;
+                }
+
+                const rms = Math.sqrt(sum / dataArray.length);
+
+                if (rms > threshold) {
+                    gate.gain.setTargetAtTime(
+                        openGain,
+                        audioContext.currentTime,
+                        0.01
+                    );
+                } else {
+                    gate.gain.setTargetAtTime(
+                        closedGain,
+                        audioContext.currentTime,
+                        0.08
+                    );
+                }
+
+                requestAnimationFrame(updateGate);
+            }
+
+            updateGate();
+
+            const processedTrack =
+                destination.stream.getAudioTracks()[0];
+
+            audioTrack =
+                new LivekitClient.LocalAudioTrack(processedTrack);
+
+            const settings = rawTrack.getSettings();
+
+            const actualLabel =
+                rawTrack.label || 'Unknown microphone';
+
+            console.log('Requested mic:', selectedMicId);
+            console.log('Connected deviceId:', settings.deviceId);
+            console.log('Connected label:', actualLabel);
+
+            statusDiv.textContent =
+                'Streaming LIVE with noise filter from: ' + actualLabel;
+
+        } catch(e) {
+
+            console.error('Selected microphone failed:', e);
+
+            statusDiv.textContent =
+                'ERROR: Selected microphone failed. Press Refresh Microphones and try again.';
+
+            startBtn.disabled = false;
+
+            if (room) {
+                room.disconnect();
+                room = null;
+            }
+
+            return;
+        }
+
+        await room.localParticipant.publishTrack(
+            audioTrack
+        );
+
+        pauseBtn.disabled = false;
+        disconnectBtn.disabled = false;
+        micSelect.disabled = true;
+        refreshMicsBtn.disabled = true;
+
+    } catch(err) {
+
+        console.error(err);
+
+        statusDiv.textContent =
+            'ERROR: ' + err.message;
+
+        startBtn.disabled = false;
+
+        if (room) {
+            room.disconnect();
+            room = null;
+        }
+
+    }
+
+};
+
+// ------------------------------------
+// PAUSE
+// ------------------------------------
+
+pauseBtn.onclick = async () => {
+
+    try {
+
+        if (audioTrack) {
+
+            await audioTrack.mute();
+
+            statusDiv.textContent =
+                'Microphone paused';
+
+            pauseBtn.disabled = true;
+            resumeBtn.disabled = false;
+
+        }
+
+    } catch(err) {
+
+        console.error(err);
+
+    }
+
+};
+
+// ------------------------------------
+// RESUME
+// ------------------------------------
+
+resumeBtn.onclick = async () => {
+
+    try {
+
+        if (audioTrack) {
+
+            await audioTrack.unmute();
+
+            statusDiv.textContent =
+                'Microphone resumed: ' +
+                audioTrack.mediaStreamTrack.label;
+
+            pauseBtn.disabled = false;
+            resumeBtn.disabled = true;
+
+        }
+
+    } catch(err) {
+
+        console.error(err);
+
+    }
+
+};
+
+// ------------------------------------
+// DISCONNECT
+// ------------------------------------
+
+disconnectBtn.onclick = async () => {
+
+    try {
+
+        if (audioTrack) {
+
+            audioTrack.stop();
+            audioTrack = null;
+
+        }
+
+        if (room) {
+
+            room.disconnect();
+            room = null;
+
+        }
+
+        if (wakeLock) {
+
+            try {
+                await wakeLock.release();
+            } catch(e) {}
+
+            wakeLock = null;
+
+        }
+
+        statusDiv.textContent =
+            'Disconnected';
+
+        startBtn.disabled = false;
+        pauseBtn.disabled = true;
+        resumeBtn.disabled = true;
+        disconnectBtn.disabled = true;
+        micSelect.disabled = false;
+        refreshMicsBtn.disabled = false;
+
+    } catch(err) {
+
+        console.error(err);
+
+    }
+
+};
+</script>
+
+</body>
+</html>
