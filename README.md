@@ -332,6 +332,47 @@ Listeners use plain HTTP because they only receive audio.
 - Resume
 - Disconnect
 
+## Speaker Audio Input Options
+
+The `speaker.html` page includes four audio input controls for improving microphone quality and reducing background noise.
+
+| Input | Default | Description |
+|---|---|---|
+| Echo Cancellation | Off | Reduces echo caused by speakers or room feedback. For external audio sources such as a translation receiver, this should usually stay off. |
+| Noise Suppression | On | Enables browser noise reduction to reduce constant background noise. |
+| Auto Gain Control | Off | Automatically increases or decreases microphone volume. For translation receivers, this should usually stay off because it can increase hiss when nobody is speaking. |
+| Noise Gate Threshold | 0.018 | Controls how much signal is required before the microphone opens. Lower values are more sensitive. Higher values cut more background hiss when the translator is silent. |
+
+### Recommended Settings For Translation Receivers
+
+```text
+Echo Cancellation: Off
+Noise Suppression: On
+Auto Gain Control: Off
+Noise Gate Threshold: 0.018
+```
+
+### Reduce Background Hiss
+
+If hiss is still audible when nobody is speaking, increase the threshold:
+
+```text
+0.022
+0.025
+0.030
+```
+
+### Avoid Cutting Off Words
+
+If the beginning of words is being cut off, lower the threshold:
+
+```text
+0.012
+0.015
+```
+
+The noise gate is especially useful when a translation receiver is connected to the speaker device as an external microphone.
+
 ## Listener
 
 - Connect
