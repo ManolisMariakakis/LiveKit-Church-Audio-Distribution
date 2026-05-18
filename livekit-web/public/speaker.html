@@ -256,7 +256,7 @@ button:disabled{
 </div>
 
 <script>
-const SERVER_IP = 'XXX.XXX.XXX.XXX';
+const SERVER_IP = 'ΧΧΧ.ΧΧΧ.ΧΧΧ.ΧΧΧ';
 const LIVEKIT_URL = `ws://${SERVER_IP}:7880`;
 const ROOM_NAME = 'translation-room';
 
@@ -275,6 +275,8 @@ const noiseThresholdInput = document.getElementById('noiseThreshold');
 let room = null;
 let audioTrack = null;
 let wakeLock = null;
+let retryMicTimer = null;
+let retryMicActive = false;
 
 // ------------------------------------
 // LOAD MICROPHONES
@@ -366,6 +368,73 @@ window.addEventListener('load', loadMicrophones);
 // START
 // ------------------------------------
 
+function startMicRetry() {
+
+    if (retryMicActive) return;
+
+    retryMicActive = true;
+
+    statusDiv.textContent =
+        'Microphone lost. Retrying...';
+
+    retryMicTimer = setInterval(async () => {
+
+        try {
+
+            if (!room) return;
+
+            statusDiv.textContent =
+                'Retrying microphone...';
+
+            const selectedMicId = micSelect.value;
+
+            const rawStream =
+                await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        deviceId: selectedMicId || undefined,
+                        echoCancellation: echoCancellationCheckbox.checked,
+                        noiseSuppression: noiseSuppressionCheckbox.checked,
+                        autoGainControl: autoGainControlCheckbox.checked
+                    }
+                });
+
+            const newRawTrack =
+                rawStream.getAudioTracks()[0];
+
+            const newAudioTrack =
+                new LivekitClient.LocalAudioTrack(newRawTrack);
+
+            if (audioTrack) {
+                await room.localParticipant.unpublishTrack(audioTrack);
+                audioTrack.stop();
+            }
+
+            audioTrack = newAudioTrack;
+
+            await room.localParticipant.publishTrack(audioTrack);
+
+            audioTrack.mediaStreamTrack.onended = startMicRetry;
+
+            clearInterval(retryMicTimer);
+            retryMicTimer = null;
+            retryMicActive = false;
+
+            statusDiv.textContent =
+                'Microphone reconnected: ' +
+                newRawTrack.label;
+
+        } catch (err) {
+
+            console.warn('Mic retry failed:', err);
+
+            statusDiv.textContent =
+                'Microphone unavailable. Retrying...';
+
+        }
+
+    }, 3000);
+}
+
 startBtn.onclick = async () => {
 
     try {
@@ -425,10 +494,25 @@ startBtn.onclick = async () => {
 
             const source = audioContext.createMediaStreamSource(rawStream);
 
-            // Κόβει χαμηλό βουητό
+            // High pass
             const highpass = audioContext.createBiquadFilter();
             highpass.type = 'highpass';
             highpass.frequency.value = 120;
+
+            // Low pass
+            const lowpass = audioContext.createBiquadFilter();
+            lowpass.type = 'lowpass';
+            lowpass.frequency.value = 6000; 
+
+            // Compressor
+            const compressor = audioContext.createDynamicsCompressor();
+
+            compressor.threshold.value = -24;
+            compressor.knee.value = 30;
+            compressor.ratio.value = 4;
+            compressor.attack.value = 0.003;
+            compressor.release.value = 0.25;
+
 
             // Noise Gate
             const gate = audioContext.createGain();
@@ -441,8 +525,10 @@ startBtn.onclick = async () => {
             const destination = audioContext.createMediaStreamDestination();
 
             source.connect(highpass);
-            highpass.connect(analyser);
-            highpass.connect(gate);
+            highpass.connect(lowpass);
+            lowpass.connect(compressor);
+            compressor.connect(analyser);
+            compressor.connect(gate);
             gate.connect(destination);
 
             const threshold = parseFloat(noiseThresholdInput.value) || 0.018;
@@ -481,23 +567,21 @@ startBtn.onclick = async () => {
 
             updateGate();
 
-            const processedTrack =
-                destination.stream.getAudioTracks()[0];
+            const processedTrack = destination.stream.getAudioTracks()[0];
 
-            audioTrack =
-                new LivekitClient.LocalAudioTrack(processedTrack);
+            audioTrack = new LivekitClient.LocalAudioTrack(processedTrack);
+
+            audioTrack.mediaStreamTrack.onended = startMicRetry;
 
             const settings = rawTrack.getSettings();
 
-            const actualLabel =
-                rawTrack.label || 'Unknown microphone';
+            const actualLabel = rawTrack.label || 'Unknown microphone';
 
-            console.log('Requested mic:', selectedMicId);
-            console.log('Connected deviceId:', settings.deviceId);
-            console.log('Connected label:', actualLabel);
+            //console.log('Requested mic:', selectedMicId);
+            //console.log('Connected deviceId:', settings.deviceId);
+            //console.log('Connected label:', actualLabel);
 
-            statusDiv.textContent =
-                'Streaming LIVE with noise filter from: ' + actualLabel;
+            statusDiv.textContent = 'Streaming LIVE with noise filter from: ' + actualLabel;
 
         } catch(e) {
 
@@ -608,7 +692,20 @@ disconnectBtn.onclick = async () => {
 
     try {
 
+        if (retryMicTimer) {
+            clearInterval(retryMicTimer);
+            retryMicTimer = null;
+        }
+
+        retryMicActive = false;
+
         if (audioTrack) {
+            
+            try {
+
+                audioTrack.mediaStreamTrack.onended = null;
+
+            } catch(e) {}
 
             audioTrack.stop();
             audioTrack = null;
