@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Translation - Speaker</title>
+
+<script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.js"></script>
+
+<link rel="manifest" href="/speaker-manifest.json">
+<meta name="theme-color" content="#0f172a">
+
+<style>
+*{box-sizing:border-box}
+
+html,body{
+    margin:0;
+    padding:0;
+    width:100%;
+    min-height:100%;
+    font-family:Arial,sans-serif;
+    background:#0f172a;
+    color:#fff;
+}
+
+body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+}
+
+.app{
+    width:100%;
+    max-width:440px;
+    min-height:80vh;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    text-align:center;
+}
+
+.badge{
+    display:inline-block;
+    margin:0 auto 18px;
+    padding:8px 14px;
+    border-radius:999px;
+    background:#1e293b;
+    color:#93c5fd;
+    font-size:14px;
+    font-weight:700;
+}
+
+h1{
+    font-size:34px;
+    margin:0 0 12px;
+}
+
+.subtitle{
+    font-size:16px;
+    color:#cbd5e1;
+    margin-bottom:20px;
+}
+
+select{
+    width:100%;
+    padding:14px;
+    margin-bottom:14px;
+    border-radius:12px;
+    font-size:16px;
+    border:none;
+}
+
+button{
+    width:100%;
+    padding:20px;
+    font-size:22px;
+    font-weight:700;
+    border:none;
+    border-radius:16px;
+    cursor:pointer;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);
+    margin-bottom:14px;
+}
+
+button:active{
+    transform:scale(.98);
+}
+
+button:disabled{
+    background:#64748b!important;
+    color:#cbd5e1!important;
+}
+
+#refreshMicsBtn{
+    background:#475569;
+    color:#fff;
+    display:none;
+}
+
+#startBtn{
+    background:#22c55e;
+    color:#052e16;
+}
+
+#pauseBtn{
+    background:#facc15;
+    color:#422006;
+}
+
+#resumeBtn{
+    background:#38bdf8;
+    color:#082f49;
+}
+
+#disconnectBtn{
+    background:#ef4444;
+    color:#fff;
+}
+
+#status{
+    padding:16px;
+    border-radius:14px;
+    background:#1e293b;
+    color:#e2e8f0;
+    font-size:18px;
+    line-height:1.4;
+    min-height:56px;
+}
+
+.mic-buttons{
+    display:flex;
+    gap:14px;
+    width:100%;
+    margin-bottom:14px;
+}
+
+.mic-buttons button{
+    flex:1;
+    margin-bottom:0;
+}
+
+.audio-options{
+    background:#1e293b;
+    border-radius:14px;
+    padding:14px;
+    margin-bottom:14px;
+    text-align:left;
+}
+
+.audio-options label{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:15px;
+    color:#e2e8f0;
+    margin:10px 0;
+}
+
+.audio-options input[type="checkbox"]{
+    width:18px;
+    height:18px;
+}
+
+.eq-control {
+    margin-top:14px;
+    border-top: 1px solid #334155;
+    padding-top: 14px;
+}
+
+.eq-control label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 14px;
+    color: #94a3b8;
+    margin-bottom: 12px;
+}
+
+.eq-control input[type="range"] {
+    width: 100%;
+    accent-color: #38bdf8;
+}
+
+.eq-title {
+    font-size: 15px;
+    font-weight: bold;
+    color: #f1f5f9;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.flex-label {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.val-badge {
+    color: #38bdf8;
+    font-weight: bold;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <h1>Live Translation - Speaker</h1>
+
+    <div class="subtitle">
+        Select microphone and configure live audio controls
+    </div>
+
+    <select id="micSelect">
+        <option value="">
+            Loading microphones...
+        </option>
+    </select>
+
+    <button id="refreshMicsBtn">
+        Refresh Microphones
+    </button>
+
+    <div class="audio-options">
+        <label>
+            <input type="checkbox" id="echoCancellation">
+            Echo Cancellation
+        </label>
+
+        <label>
+            <input type="checkbox" id="noiseSuppression" checked>
+            Noise Suppression
+        </label>
+
+        <label>
+            <input type="checkbox" id="autoGainControl">
+            Auto Gain Control
+        </label>
+
+        <div class="eq-control">
+            <div class="eq-title">Noise Gate</div>
+            <label>
+                <div class="flex-label"><span>Threshold:</span> <span id="gateVal" class="val-badge">0.012</span></div>
+                <input type="range" id="noiseThreshold" min="0" max="0.1" step="0.001" value="0.012">
+            </label>
+        </div>
+
+        <div class="eq-control">
+            <div class="eq-title">Equalizer (EQ)</div>
+            <label>
+                <div class="flex-label"><span>Bass:</span> <span id="bassVal" class="val-badge">0 dB</span></div>
+                <input type="range" id="bassKnob" min="-12" max="12" value="0" step="1">
+            </label>
+
+            <label>
+                <div class="flex-label"><span>Treble:</span> <span id="trebleVal" class="val-badge">+2 dB</span></div>
+                <input type="range" id="trebleKnob" min="-12" max="12" value="2" step="1">
+            </label>
+        </div>
+
+        <div class="eq-control">
+            <div class="eq-title">Compressor (Dynamics)</div>
+            <label>
+                <div class="flex-label"><span>Threshold:</span> <span id="compThresholdVal" class="val-badge">-20 dB</span></div>
+                <input type="range" id="compThresholdKnob" min="-60" max="0" value="-20" step="1">
+            </label>
+
+            <label>
+                <div class="flex-label"><span>Ratio:</span> <span id="compRatioVal" class="val-badge">3.5:1</span></div>
+                <input type="range" id="compRatioKnob" min="1" max="12" value="3.5" step="0.5">
+            </label>
+        </div>
+
+
+
+        <div class="eq-control">
+            <div class="eq-title">Output Boost</div>
+            <label>
+                <div class="flex-label"><span>Gain:</span> <span id="boostVal" class="val-badge">2.0x</span></div>
+                <input type="range" id="boostKnob" min="1" max="5" value="2" step="0.1">
+            </label>
+        </div>
+
+        <div class="eq-control">
+            <div class="eq-title">Filters (Cuts)</div>
+            <label>
+                <div class="flex-label"><span>Highpass (Low Cut):</span> <span id="hpVal" class="val-badge">80 Hz</span></div>
+                <input type="range" id="hpKnob" min="20" max="250" value="80" step="5">
+            </label>
+
+            <label>
+                <div class="flex-label"><span>Lowpass (High Cut):</span> <span id="lpVal" class="val-badge">8500 Hz</span></div>
+                <input type="range" id="lpKnob" min="4000" max="15000" value="8500" step="100">
+            </label>
+        </div>
+    </div>
+
+    <button id="startBtn">
+        Start
+    </button>
+
+    <div class="mic-buttons">
+        <button id="pauseBtn" disabled>
+            Pause Mic
+        </button>
+
+        <button id="resumeBtn" disabled>
+            Resume
+        </button>
+    </div>
+
+    <button id="disconnectBtn" disabled>
+        Disconnect
+    </button>
+
+    <div id="status">
+        Ready
+    </div>
+
+</div>
+<script src="config.js"></script>
+<script>
+const LIVEKIT_URL = `ws://${SERVER_IP}:7880`;
+const ROOM_NAME = 'translation-room';
+
+const statusDiv = document.getElementById('status');
+const micSelect = document.getElementById('micSelect');
+const refreshMicsBtn = document.getElementById('refreshMicsBtn');
+const startBtn = document.getElementById('startBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const resumeBtn = document.getElementById('resumeBtn');
+const disconnectBtn = document.getElementById('disconnectBtn');
+const echoCancellationCheckbox = document.getElementById('echoCancellation');
+const noiseSuppressionCheckbox = document.getElementById('noiseSuppression');
+const autoGainControlCheckbox = document.getElementById('autoGainControl');
+
+// UI Sliders & Badges
+const noiseThresholdInput = document.getElementById('noiseThreshold');
+const gateVal = document.getElementById('gateVal');
+const bassKnob = document.getElementById('bassKnob');
+const bassVal = document.getElementById('bassVal');
+const trebleKnob = document.getElementById('trebleKnob');
+const trebleVal = document.getElementById('trebleVal');
+const compThresholdKnob = document.getElementById('compThresholdKnob');
+const compThresholdVal = document.getElementById('compThresholdVal');
+const compRatioKnob = document.getElementById('compRatioKnob');
+const compRatioVal = document.getElementById('compRatioVal');
+const boostKnob = document.getElementById('boostKnob');
+const boostVal = document.getElementById('boostVal');
+const hpKnob = document.getElementById('hpKnob');
+const hpVal = document.getElementById('hpVal');
+const lpKnob = document.getElementById('lpKnob');
+const lpVal = document.getElementById('lpVal');
+
+let room = null;
+let audioTrack = null;
+let currentRawStream = null; 
+let wakeLock = null;
+let retryMicTimer = null;
+let retryMicActive = false;
+
+// Web Audio Nodes references
+let audioContext = null;
+let highpassNode = null;
+let lowpassNode = null;
+let bassFilterNode = null;
+let trebleFilterNode = null;
+let compressorNode = null;
+let outputGainNode = null;
+let gateAnimationFrameId = null;
+
+// ------------------------------------
+// LIVE REAL-TIME EVENT LISTENERS
+// ------------------------------------
+
+let currentNoiseThreshold = parseFloat(noiseThresholdInput.value);
+
+noiseThresholdInput.oninput = () => {
+    currentNoiseThreshold = parseFloat(noiseThresholdInput.value);
+    gateVal.textContent = currentNoiseThreshold.toFixed(3);
+};
+
+bassKnob.oninput = () => {
+    const val = parseInt(bassKnob.value);
+    bassVal.textContent = (val > 0 ? '+' : '') + val + ' dB';
+    if (bassFilterNode) {
+        bassFilterNode.gain.value = val;
+    }
+};
+
+trebleKnob.oninput = () => {
+    const val = parseInt(trebleKnob.value);
+    trebleVal.textContent = (val > 0 ? '+' : '') + val + ' dB';
+    if (trebleFilterNode) {
+        trebleFilterNode.gain.value = val;
+    }
+};
+
+compThresholdKnob.oninput = () => {
+    const val = parseInt(compThresholdKnob.value);
+    compThresholdVal.textContent = val + ' dB';
+    if (compressorNode) {
+        compressorNode.threshold.value = val;
+    }
+};
+
+compRatioKnob.oninput = () => {
+    const val = parseFloat(compRatioKnob.value);
+    compRatioVal.textContent = val + ':1';
+    if (compressorNode) {
+        compressorNode.ratio.value = val;
+    }
+};
+
+boostKnob.oninput = () => {
+    const val = parseFloat(boostKnob.value);
+    boostVal.textContent = val.toFixed(1) + 'x';
+    if (outputGainNode) {
+        outputGainNode.gain.setTargetAtTime(
+            val,
+            audioContext.currentTime,
+            0.02
+        );
+    }
+};
+
+hpKnob.oninput = () => {
+    const val = parseInt(hpKnob.value);
+    hpVal.textContent = val + ' Hz';
+    if (highpassNode) {
+        highpassNode.frequency.value = val;
+    }
+};
+
+lpKnob.oninput = () => {
+    const val = parseInt(lpKnob.value);
+    lpVal.textContent = val + ' Hz';
+    if (lowpassNode) {
+        lowpassNode.frequency.value = val;
+    }
+};
+
+// Helper function to update hardware mic settings (Checkboxes) in real-time
+function updateMicrophoneConstraints() {
+    if (currentRawStream && currentRawStream.getAudioTracks().length > 0) {
+        const rawTrack = currentRawStream.getAudioTracks()[0];
+        rawTrack.applyConstraints({
+            echoCancellation: echoCancellationCheckbox.checked,
+            noiseSuppression: noiseSuppressionCheckbox.checked,
+            autoGainControl: autoGainControlCheckbox.checked
+        })
+        .then(() => {
+            console.log("Hardware audio constraints updated successfully in real-time.");
+        })
+        .catch(err => {
+            console.error("Failed to update hardware constraints in real-time:", err);
+        });
+    }
+}
+
+echoCancellationCheckbox.onchange = updateMicrophoneConstraints;
+noiseSuppressionCheckbox.onchange = updateMicrophoneConstraints;
+autoGainControlCheckbox.onchange = updateMicrophoneConstraints;
+
+// --- ΝΕΕΣ ΣΥΝΑΡΤΗΣΕΙΣ ΔΙΑΧΕΙΡΙΣΗΣ WAKE LOCK ΓΙΑ ΤΟΝ SPEAKER ---
+async function requestWakeLock() {
+    try {
+        if ('wakeLock' in navigator && room && room.state === 'connected') {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log('Speaker Screen Wake Lock active.');
+        }
+    } catch (err) {
+        console.warn(`Speaker Wake Lock request failed: ${err.message}`);
+    }
+}
+
+// Αυτόματη επαναφορά αν ο χρήστης αλλάξει tab ή ειδοποίηση και επιστρέψει
+function handleVisibilityChange() {
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+        requestWakeLock();
+    }
+}
+document.addEventListener('visibilitychange', handleVisibilityChange);
+// -----------------------------------------------------------------
+
+
+// ------------------------------------
+// LOAD MICROPHONES
+// ------------------------------------
+async function loadMicrophones() {
+    try {
+        statusDiv.textContent = 'Loading microphones...';
+        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tempStream.getTracks().forEach(track => track.stop());
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const mics = devices.filter(device => device.kind === 'audioinput');
+        micSelect.innerHTML = '';
+
+        if (!mics.length) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No microphones found';
+            micSelect.appendChild(option);
+            statusDiv.textContent = 'No microphones found';
+            return;
+        }
+
+        mics.forEach((device, index) => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.textContent = device.label || `Microphone ${index + 1}`;
+            micSelect.appendChild(option);
+        });
+
+        const preferred = [...micSelect.options].find(option => {
+            const label = option.textContent.toLowerCase();
+            return (label.includes('rode') || label.includes('røde') || label.includes('wireless') || label.includes('usb'));
+        });
+
+        if (preferred) micSelect.value = preferred.value;
+        statusDiv.textContent = 'Microphones loaded. Selected: ' + micSelect.options[micSelect.selectedIndex].textContent;
+    } catch(err) {
+        console.error(err);
+        statusDiv.textContent = 'Microphone permission required';
+    }
+}
+
+refreshMicsBtn.onclick = loadMicrophones;
+window.addEventListener('load', loadMicrophones);
+
+// ------------------------------------
+// START & AUDIO PROCESSING / WATCHDOG RETRY
+// ------------------------------------
+function startMicRetry() {
+    if (retryMicActive) return;
+    retryMicActive = true;
+    statusDiv.textContent = 'Microphone lost (Hardware Unplugged). Retrying...';
+
+    retryMicTimer = setInterval(async () => {
+        try {
+            if (!room) return;
+            statusDiv.textContent = 'Retrying microphone hardware source...';
+
+            const selectedMicId = micSelect.value;
+            const rawStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    deviceId: selectedMicId || undefined,
+                    echoCancellation: echoCancellationCheckbox.checked,
+                    noiseSuppression: noiseSuppressionCheckbox.checked,
+                    autoGainControl: autoGainControlCheckbox.checked
+                }
+            });
+
+            currentRawStream = rawStream; 
+            const newRawTrack = rawStream.getAudioTracks()[0];
+            const newAudioTrack = new LivekitClient.LocalAudioTrack(newRawTrack);
+
+            if (audioTrack) {
+                await room.localParticipant.unpublishTrack(audioTrack);
+                audioTrack.stop();
+            }
+
+            audioTrack = newAudioTrack;
+            await room.localParticipant.publishTrack(audioTrack);
+            
+            newRawTrack.onended = startMicRetry;
+
+            clearInterval(retryMicTimer);
+            retryMicTimer = null;
+            retryMicActive = false;
+            statusDiv.textContent = 'Microphone reconnected: ' + newRawTrack.label;
+        } catch (err) {
+            console.warn('Mic retry failed:', err);
+            statusDiv.textContent = 'Microphone unavailable. Please reconnect cable...';
+        }
+    }, 3000);
+}
+
+startBtn.onclick = async () => {
+    try {
+        startBtn.disabled = true;
+        statusDiv.textContent = 'Getting token...';
+
+        const response = await fetch(`/token?room=${ROOM_NAME}&identity=speaker`);
+        if (!response.ok) throw new Error('Token request failed');
+        const data = await response.json();
+
+        room = new LivekitClient.Room();
+        statusDiv.textContent = 'Connecting...';
+        await room.connect(LIVEKIT_URL, data.token);
+
+        // Ενεργοποίηση του Wake Lock αμέσως μετά τη σύνδεση στο δωμάτιο
+        await requestWakeLock();
+
+        const selectedMicId = micSelect.value;
+        statusDiv.textContent = 'Opening microphone...';
+
+        const audioOptions = {
+            deviceId: selectedMicId || undefined,
+            echoCancellation: echoCancellationCheckbox.checked,
+            noiseSuppression: noiseSuppressionCheckbox.checked,
+            autoGainControl: autoGainControlCheckbox.checked
+        };
+
+        try {
+            const rawStream = await navigator.mediaDevices.getUserMedia({ audio: audioOptions });
+            currentRawStream = rawStream; 
+            const rawTrack = rawStream.getAudioTracks()[0];
+
+            audioContext = new AudioContext();
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+            const source = audioContext.createMediaStreamSource(rawStream);
+
+            highpassNode = audioContext.createBiquadFilter();
+            highpassNode.type = 'highpass';
+            highpassNode.frequency.value = parseInt(hpKnob.value); 
+
+            bassFilterNode = audioContext.createBiquadFilter();
+            bassFilterNode.type = 'lowshelf';
+            bassFilterNode.frequency.value = 200; 
+            bassFilterNode.gain.value = parseFloat(bassKnob.value);
+
+            trebleFilterNode = audioContext.createBiquadFilter();
+            trebleFilterNode.type = 'highshelf';
+            trebleFilterNode.frequency.value = 4000; 
+            trebleFilterNode.gain.value = parseFloat(trebleKnob.value);
+
+            const clarityEq = audioContext.createBiquadFilter();
+            clarityEq.type = 'peaking';
+            clarityEq.frequency.value = 3000;
+            clarityEq.Q.value = 1.0;
+            clarityEq.gain.value = 2.5;
+
+            lowpassNode = audioContext.createBiquadFilter();
+            lowpassNode.type = 'lowpass';
+            lowpassNode.frequency.value = parseInt(lpKnob.value); 
+
+            compressorNode = audioContext.createDynamicsCompressor();
+            compressorNode.threshold.value = parseFloat(compThresholdKnob.value);
+            compressorNode.knee.value = 20;
+            compressorNode.ratio.value = parseFloat(compRatioKnob.value);
+            compressorNode.attack.value = 0.005;
+            compressorNode.release.value = 0.15;
+
+            outputGainNode = audioContext.createGain();
+            outputGainNode.gain.value = parseFloat(boostKnob.value);
+
+            const gate = audioContext.createGain();
+            const analyser = audioContext.createAnalyser();
+            analyser.fftSize = 2048;
+            const dataArray = new Uint8Array(analyser.fftSize);
+
+            const destination = audioContext.createMediaStreamDestination();
+
+            source.connect(highpassNode);
+            highpassNode.connect(bassFilterNode);
+            bassFilterNode.connect(trebleFilterNode);
+            trebleFilterNode.connect(clarityEq);
+            clarityEq.connect(lowpassNode);          
+            lowpassNode.connect(compressorNode);
+            compressorNode.connect(outputGainNode);
+            outputGainNode.connect(analyser);
+            outputGainNode.connect(gate);
+            gate.connect(destination);
+
+            const openGain = 1.0;
+            const closedGain = 0.01;
+
+            function updateGate() {
+                if (!room || room.state !== 'connected') return;
+                
+                analyser.getByteTimeDomainData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    const value = (dataArray[i] - 128) / 128;
+                    sum += value * value;
+                }
+                const rms = Math.sqrt(sum / dataArray.length);
+
+                if (rms > currentNoiseThreshold) {
+                    gate.gain.setTargetAtTime(openGain, audioContext.currentTime, 0.002);
+                } else {
+                    gate.gain.setTargetAtTime(closedGain, audioContext.currentTime, 0.15);
+                }
+                gateAnimationFrameId = requestAnimationFrame(updateGate);
+            }
+            updateGate();
+
+            const processedTrack = destination.stream.getAudioTracks()[0];
+            audioTrack = new LivekitClient.LocalAudioTrack(processedTrack);
+            
+            if (rawTrack) {
+                rawTrack.onended = startMicRetry;
+            }
+
+            statusDiv.textContent = 'Streaming LIVE with Advanced Mixer Controls';
+
+        } catch(e) {
+            console.error(e);
+            statusDiv.textContent = 'ERROR: Microphone failed. Press Refresh and try again.';
+            startBtn.disabled = false;
+            if (room) { room.disconnect(); room = null; }
+            return;
+        }
+
+        await room.localParticipant.publishTrack(audioTrack);
+        pauseBtn.disabled = false;
+        disconnectBtn.disabled = false;
+        micSelect.disabled = true;
+        refreshMicsBtn.disabled = true;
+
+    } catch(err) {
+        console.error(err);
+        statusDiv.textContent = 'ERROR: ' + err.message;
+        startBtn.disabled = false;
+        if (room) { room.disconnect(); room = null; }
+    }
+};
+
+// ------------------------------------
+// PAUSE / RESUME / DISCONNECT
+// ------------------------------------
+pauseBtn.onclick = async () => {
+    try {
+        if (audioTrack) {
+            await audioTrack.mute();
+            statusDiv.textContent = 'Microphone paused';
+            pauseBtn.disabled = true;
+            resumeBtn.disabled = false;
+        }
+    } catch(err) { console.error(err); }
+};
+
+resumeBtn.onclick = async () => {
+    try {
+        if (audioTrack) {
+            await audioTrack.unmute();
+            statusDiv.textContent = 'Microphone resumed';
+            pauseBtn.disabled = false;
+            resumeBtn.disabled = true;
+        }
+    } catch(err) { console.error(err); }
+};
+
+disconnectBtn.onclick = async () => {
+    try {
+        if (retryMicTimer) { clearInterval(retryMicTimer); retryMicTimer = null; }
+        retryMicActive = false;
+
+        if (gateAnimationFrameId) {
+            cancelAnimationFrame(gateAnimationFrameId);
+            gateAnimationFrameId = null;
+        }
+
+        if (audioTrack) {
+            try { audioTrack.mediaStreamTrack.onended = null; } catch(e) {}
+            audioTrack.stop();
+            audioTrack = null;
+        }
+        if (currentRawStream) {
+            currentRawStream.getTracks().forEach(track => track.stop());
+            currentRawStream = null;
+        }
+        if (room) { room.disconnect(); room = null; }
+        
+        // Απελευθέρωση του Wake Lock κατά την αποσύνδεση
+        if (wakeLock) { 
+            try { await wakeLock.release(); } catch(e) {} 
+            wakeLock = null; 
+        }
+
+        if (audioContext) {
+            await audioContext.close();
+            audioContext = null;
+        }
+
+        highpassNode = null;
+        lowpassNode = null;
+        bassFilterNode = null;
+        trebleFilterNode = null;
+        compressorNode = null;
+        outputGainNode = null;
+
+        statusDiv.textContent = 'Disconnected';
+        startBtn.disabled = false;
+        pauseBtn.disabled = true;
+        resumeBtn.disabled = true;
+        disconnectBtn.disabled = true;
+        micSelect.disabled = false;
+        refreshMicsBtn.disabled = false;
+    } catch(err) { console.error(err); }
+};
+</script>
+
+</body>
+</html>

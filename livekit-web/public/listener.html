@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Translation - Listener</title>
+
+<script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.js"></script>
+
+<link rel="manifest" href="/listener-manifest.json">
+<meta name="theme-color" content="#0f172a">
+
+<style>
+*{
+    box-sizing:border-box;
+}
+
+html, body{
+    margin:0;
+    padding:0;
+    width:100%;
+    min-height:100%;
+    font-family:Arial, sans-serif;
+    background:#0f172a;
+    color:#ffffff;
+}
+
+body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+}
+
+.app{
+    width:100%;
+    max-width:420px;
+    min-height:80vh;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    text-align:center;
+}
+
+.badge{
+    display:inline-block;
+    margin:0 auto 18px;
+    padding:8px 14px;
+    border-radius:999px;
+    background:#1e293b;
+    color:#93c5fd;
+    font-size:14px;
+    font-weight:700;
+    letter-spacing:.5px;
+}
+
+h1{
+    font-size:34px;
+    margin:0 0 12px;
+    font-weight:700;
+}
+
+.subtitle{
+    font-size:16px;
+    color:#cbd5e1;
+    margin-bottom:30px;
+}
+
+button{
+    width:100%;
+    padding:20px;
+    font-size:22px;
+    font-weight:700;
+    border:none;
+    border-radius:16px;
+    cursor:pointer;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);
+    margin-bottom:14px;
+}
+
+button:disabled{
+    background:#334155;
+    color:#94a3b8;
+    cursor:not-allowed;
+    pointer-events:none;
+    opacity:.45;
+    box-shadow:none;
+    filter:grayscale(100%);
+}
+
+#connectBtn{
+    background:#38bdf8;
+    color:#082f49;
+}
+
+#disconnectBtn{
+    background:#ef4444;
+    color:#ffffff;
+}
+
+button:active{
+    transform:scale(.98);
+}
+
+button:disabled{
+    background:#64748b;
+    color:#cbd5e1;
+}
+
+select{
+    width:100%;
+    padding:14px;
+    margin-bottom:14px;
+    border-radius:12px;
+    font-size:16px;
+    border:none;
+}
+
+#status{
+    margin-top:20px;
+    padding:16px;
+    border-radius:14px;
+    background:#1e293b;
+    color:#e2e8f0;
+    font-size:18px;
+    line-height:1.4;
+    min-height:56px;
+}
+
+#installBtn{
+    background:#22c55e;
+    color:#052e16;
+}
+
+.volume-container{
+    margin-top:20px;
+    text-align:left;
+}
+
+.volume-label{
+    margin-bottom:10px;
+    font-size:15px;
+    color:#cbd5e1;
+}
+
+input[type=range]{
+    width:100%;
+}
+
+.pipeline-container {
+    margin-top: 15px;
+    background: #1e293b;
+    padding: 14px;
+    border-radius: 12px;
+    text-align: left;
+}
+.pipeline-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #38bdf8;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+.pipeline-row {
+    margin-bottom: 10px;
+}
+.pipeline-row label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #94a3b8;
+    margin-bottom: 4px;
+}
+.pipeline-row input[type=range] {
+    accent-color: #38bdf8;
+}
+
+@media (max-width:480px){
+
+    body{
+        padding:16px;
+    }
+
+    h1{
+        font-size:30px;
+    }
+
+    button{
+        font-size:20px;
+        padding:18px;
+    }
+
+    #status{
+        font-size:16px;
+        margin-bottom:20px;
+    }
+
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <h1>Live Translation - Listener</h1>
+
+    <div class="subtitle">
+        Connect to hear the live translation
+    </div>
+
+    <select id="sourceSelect">
+
+        <option value="speaker" selected>Human Translation</option>
+
+        <option value="translator-en">AI English</option>
+        <option value="translator-es">AI Spanish</option>
+        <option value="translator-pt">AI Portuguese</option>
+        <option value="translator-fr">AI French</option>
+        <option value="translator-it">AI Italian</option>
+        <option value="translator-de">AI German</option>
+        <option value="translator-ru">AI Russian</option>
+        <option value="translator-zh">AI Chinese</option>
+        <option value="translator-ja">AI Japanese</option>
+        <option value="translator-ko">AI Korean</option>
+        <option value="translator-hi">AI Hindi</option>
+        <option value="translator-id">AI Indonesian</option>
+        <option value="translator-vi">AI Vietnamese</option>
+
+    </select>
+
+
+    <button id="connectBtn">
+        Connect & Listen
+    </button>
+
+    <div class="volume-container">
+        <div class="volume-label">
+            Volume
+        </div>
+
+        <input
+            type="range"
+            id="volumeSlider"
+            min="0"
+            max="1"
+            step="0.01"
+            value="1"
+        >
+    </div>
+
+    <div class="pipeline-container">
+        <div class="pipeline-title">Audio Pipeline FX</div>
+        
+        <div class="pipeline-row">
+            <label><span>Bass Boost:</span> <span id="bassVal">0 dB</span></label>
+            <input type="range" id="bassKnob" min="-10" max="12" value="0" step="1">
+        </div>
+
+        <div class="pipeline-row">
+            <label><span>Treble Boost:</span> <span id="trebleVal">0 dB</span></label>
+            <input type="range" id="trebleKnob" min="-10" max="12" value="0" step="1">
+        </div>
+
+        <div class="pipeline-row">
+            <label><span>Voice Leveler (Compressor):</span> <span id="compVal">OFF</span></label>
+            <input type="range" id="compKnob" min="0" max="1" value="0" step="1">
+        </div>
+    </div>
+
+    <div id="status">Ready</div>
+
+    <button id="disconnectBtn" disabled>
+        Disconnect
+    </button>
+
+    <button id="installBtn" style="display:none;">
+        Install Listener App
+    </button>
+
+</div>
+<script src="config.js"></script>
+<script>
+
+const LIVEKIT_URL = `ws://${SERVER_IP}:7880`;
+
+const ROOM_NAME = 'translation-room';
+
+const statusDiv = document.getElementById('status');
+
+const connectBtn = document.getElementById('connectBtn');
+
+const disconnectBtn = document.getElementById('disconnectBtn');
+
+const volumeSlider = document.getElementById('volumeSlider');
+
+const installBtn = document.getElementById('installBtn');
+
+const sourceSelect = document.getElementById('sourceSelect');
+
+let room = null;
+
+let audioElement = null;
+
+let deferredPrompt = null;
+
+const bassKnob = document.getElementById('bassKnob');
+const bassVal = document.getElementById('bassVal');
+const trebleKnob = document.getElementById('trebleKnob');
+const trebleVal = document.getElementById('trebleVal');
+const compKnob = document.getElementById('compKnob');
+const compVal = document.getElementById('compVal');
+
+let audioContext = null;
+let audioSourceNode = null;
+let bassNode = null;
+let trebleNode = null;
+let compressorNode = null;
+
+
+let wakeLock = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+
+    deferredPrompt = e;
+
+    installBtn.style.display = 'block';
+});
+
+installBtn.onclick = async () => {
+
+    if (!deferredPrompt) {
+        statusDiv.textContent = 'Install option is not available yet';
+        return;
+    }
+
+    deferredPrompt.prompt();
+
+    const choice = await deferredPrompt.userChoice;
+
+    if (choice.outcome === 'accepted') {
+        statusDiv.textContent = 'Listener app installed';
+    } else {
+        statusDiv.textContent = 'Installation cancelled';
+    }
+
+    deferredPrompt = null;
+
+    installBtn.style.display = 'none';
+};
+
+sourceSelect.onchange = () => {
+
+    statusDiv.textContent = 'Selected source: ' + sourceSelect.value;
+
+};
+
+async function requestWakeLock() {
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log('Wake Lock acquired successfully.');
+        }
+    } catch (err) {
+        console.warn(`Wake Lock request failed: ${err.message}`);
+    }
+}
+
+function handleVisibilityChange() {
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+        requestWakeLock();
+    }
+}
+
+document.addEventListener('visibilitychange', handleVisibilityChange);
+
+
+connectBtn.onclick = async () => {
+
+    try {
+
+        connectBtn.disabled = true;
+
+        statusDiv.textContent = 'Getting token...';
+
+        const identity =
+            'listener-' + Math.random().toString(36).substring(2);
+
+        const response = await fetch(
+            `/token?room=${ROOM_NAME}&identity=${identity}`
+        );
+
+        const data = await response.json();
+
+        room = new LivekitClient.Room();
+
+        let LISTEN_TO_IDENTITY = sourceSelect.value;
+
+        room.on(
+            LivekitClient.RoomEvent.TrackSubscribed,
+            async (track, publication, participant) => { 
+
+                if (
+                    participant.identity !==
+                    LISTEN_TO_IDENTITY
+                ) {
+                    return;
+                }
+
+                if (track.kind === 'audio') {
+
+                    if (audioContext) {
+                        try {
+                            if (audioSourceNode) audioSourceNode.disconnect();
+                            if (bassNode) bassNode.disconnect();
+                            if (trebleNode) trebleNode.disconnect();
+                            if (compressorNode) compressorNode.disconnect();
+                            await audioContext.close();
+                        } catch(e) { console.error(e); }
+                        audioContext = null;
+                    }
+
+                    audioElement = track.attach();
+
+                    audioElement.style.display = 'none';
+
+                    audioElement.volume =
+                        volumeSlider.value;
+
+                    document.body.appendChild(
+                        audioElement
+                    );
+
+                    audioElement.play();
+
+                    statusDiv.textContent =
+                        'Audio playing from: ' +
+                        participant.identity;
+
+                    try {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        
+                        if (audioContext.state === 'suspended') {
+                            await audioContext.resume();
+                        }
+                        
+                        audioSourceNode = audioContext.createMediaElementSource(audioElement);
+
+                        bassNode = audioContext.createBiquadFilter();
+                        bassNode.type = 'lowshelf';
+                        bassNode.frequency.value = 200;
+                        bassNode.gain.value = parseInt(bassKnob.value);
+
+                        trebleNode = audioContext.createBiquadFilter();
+                        trebleNode.type = 'highshelf';
+                        trebleNode.frequency.value = 4000;
+                        trebleNode.gain.value = parseInt(trebleKnob.value);
+
+                        compressorNode = audioContext.createDynamicsCompressor();
+                        compressorNode.threshold.value = (parseInt(compKnob.value) === 1) ? -24 : 0;
+                        compressorNode.knee.value = 30;
+                        compressorNode.ratio.value = 4;
+                        compressorNode.attack.value = 0.01;
+                        compressorNode.release.value = 0.25;
+
+                        audioSourceNode.connect(bassNode);
+                        bassNode.connect(trebleNode);
+                        trebleNode.connect(compressorNode);
+                        compressorNode.connect(audioContext.destination);
+                    } catch (ae) {
+                        console.error("Audio pipeline initialization failed:", ae);
+                    }
+                    // --------------------------------------------------------
+
+                }
+
+            }
+        );
+
+        room.on(
+            LivekitClient.RoomEvent.TrackUnsubscribed,
+            async (track, publication, participant) => {
+                if (participant.identity === LISTEN_TO_IDENTITY) {
+                    statusDiv.textContent = 'Speaker disconnected. Waiting for reconnect...';
+                    
+                    if (audioElement) {
+                        audioElement.pause();
+                        audioElement.remove();
+                        audioElement = null;
+                    }
+
+                    if (audioContext) {
+                        try {
+                            if (audioSourceNode) audioSourceNode.disconnect();
+                            if (bassNode) bassNode.disconnect();
+                            if (trebleNode) trebleNode.disconnect();
+                            if (compressorNode) compressorNode.disconnect();
+                            await audioContext.close();
+                        } catch(e) { console.error(e); }
+                        audioContext = null;
+                    }
+                    audioSourceNode = null;
+                    bassNode = null;
+                    trebleNode = null;
+                    compressorNode = null;
+                }
+            }
+        );
+
+        statusDiv.textContent = 'Connecting...';
+
+        await room.connect(LIVEKIT_URL, data.token);
+
+        await requestWakeLock();
+
+        statusDiv.textContent =
+            'Connected. Waiting for speaker...';
+
+        connectBtn.disabled = true;
+
+        disconnectBtn.disabled = false;
+
+    } catch(err) {
+
+        console.error(err);
+
+        statusDiv.textContent = 'ERROR: ' + err.message;
+
+        connectBtn.disabled = false;
+
+    }
+
+};
+
+disconnectBtn.onclick = async () => {
+
+    try {
+
+        if (room) {
+            room.disconnect();
+        }
+
+        if (audioElement) {
+            audioElement.pause();
+            audioElement.remove();
+            audioElement = null;
+        }
+
+        if (audioContext) {
+            if (audioSourceNode) audioSourceNode.disconnect();
+            if (bassNode) bassNode.disconnect();
+            if (trebleNode) trebleNode.disconnect();
+            if (compressorNode) compressorNode.disconnect();
+            await audioContext.close();
+            audioContext = null;
+        }
+        audioSourceNode = null;
+        bassNode = null;
+        trebleNode = null;
+        compressorNode = null;
+        
+        if (wakeLock) {
+            try { await wakeLock.release(); } catch(e) {}
+            wakeLock = null;
+        }
+
+        statusDiv.textContent = 'Disconnected';
+
+        connectBtn.disabled = false;
+
+        disconnectBtn.disabled = true;
+
+    } catch(err) {
+
+        console.error(err);
+
+    }
+
+};
+
+volumeSlider.oninput = () => {
+
+    if (audioElement) {
+        audioElement.volume = volumeSlider.value;
+    }
+
+};
+
+// --- LIVE ENHANCEMENT LISTENERS ΓΙΑ ΤΑ ΝΕΑ SLIDERS ---
+bassKnob.oninput = () => {
+    const val = parseInt(bassKnob.value);
+    bassVal.textContent = (val > 0 ? '+' : '') + val + ' dB';
+    if (bassNode && audioContext) {
+        bassNode.gain.setTargetAtTime(val, audioContext.currentTime, 0.02);
+    }
+};
+
+trebleKnob.oninput = () => {
+    const val = parseInt(trebleKnob.value);
+    trebleVal.textContent = (val > 0 ? '+' : '') + val + ' dB';
+    if (trebleNode && audioContext) {
+        trebleNode.gain.setTargetAtTime(val, audioContext.currentTime, 0.02);
+    }
+};
+
+compKnob.oninput = () => {
+    const active = parseInt(compKnob.value) === 1;
+    compVal.textContent = active ? 'ON' : 'OFF';
+    if (compressorNode && audioContext) {
+        compressorNode.threshold.setTargetAtTime(active ? -24 : 0, audioContext.currentTime, 0.05);
+    }
+};
+// ----------------------------------------------------
+
+</script>
+
+</body>
+</html>
