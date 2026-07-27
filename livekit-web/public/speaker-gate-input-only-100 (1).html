@@ -206,7 +206,8 @@ input[type="range"] { width: 100%; accent-color: #38bdf8; cursor: pointer; }
 
 <script src="config.js"></script>
 <script>
-const LIVEKIT_URL = `ws://${SERVER_IP}:7880`;
+const LIVEKIT_HOST = (typeof SERVER_IP !== 'undefined' && SERVER_IP) ? SERVER_IP : window.location.hostname;
+const LIVEKIT_URL = `ws://${LIVEKIT_HOST}:7880`;
 const ROOM_NAME = 'translation-room';
 
 const statusDiv = document.getElementById('status');
@@ -489,7 +490,13 @@ async function loadMicrophones() {
 }
 
 refreshMicsBtn.onclick = loadMicrophones;
-window.addEventListener('load', loadMicrophones);
+
+// Φόρτωση μικροφώνων μόλις είναι έτοιμο το DOM.
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadMicrophones, { once: true });
+} else {
+    loadMicrophones();
+}
 
 // ------------------------------------
 // START & CONNECT
