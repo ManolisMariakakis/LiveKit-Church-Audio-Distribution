@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Speaker Live Translation</title>
+
+<script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.js"></script>
+
+<link rel="manifest" href="/speaker-manifest.json">
+<meta name="theme-color" content="#0f172a">
+
+<style>
+*{box-sizing:border-box}
+
+html,body{
+    margin:0; padding:0; width:100%; min-height:100%;
+    font-family:Arial,sans-serif; background:#0f172a; color:#fff;
+}
+
+body{
+    display:flex; align-items:center; justify-content:center; padding:20px;
+}
+
+.app{
+    width:100%; max-width:440px; min-height:80vh;
+    display:flex; flex-direction:column; justify-content:center; text-align:center;
+}
+
+h1{ font-size:24px; margin:0 0 8px; }
+.subtitle{ font-size:13px; color:#38bdf8; font-weight:bold; margin-bottom:16px; }
+
+select{
+    width:100%; padding:14px; margin-bottom:14px;
+    border-radius:12px; font-size:16px; border:none; background:#f8fafc; color:#0f172a;
+}
+
+button{
+    width:100%; padding:18px; font-size:18px; font-weight:700;
+    border:none; border-radius:16px; cursor:pointer;
+    box-shadow:0 8px 24px rgba(0,0,0,.25); margin-bottom:12px;
+}
+
+button:active{ transform:scale(.98); }
+button:disabled{ background:#64748b!important; color:#cbd5e1!important; cursor:not-allowed; }
+
+#refreshMicsBtn{ background:#475569; color:#fff; display:none; }
+#startBtn{ background:#22c55e; color:#052e16; }
+#pauseBtn{ background:#facc15; color:#422006; }
+#resumeBtn{ background:#38bdf8; color:#082f49; }
+#disconnectBtn{ background:#ef4444; color:#fff; }
+#resetGateBtn{ background:#475569; color:#fff; padding:14px; font-size:15px; margin-top:12px; }
+
+#status{
+    padding:14px; border-radius:14px; background:#1e293b;
+    color:#e2e8f0; font-size:15px; min-height:50px;
+}
+
+/* Visual Meters */
+.meter-group { margin-bottom: 16px; text-align: left; }
+.meter-label { font-size: 12px; color: #94a3b8; margin-bottom: 4px; display: flex; justify-content: space-between; }
+.meter-container {
+    width: 100%; height: 10px; background: #334155;
+    border-radius: 5px; overflow: hidden; position: relative; margin-bottom: 10px;
+}
+.meter-fill { height: 100%; width: 0%; background: #22c55e; transition: width 0.05s ease; }
+.room-fill { background:#38bdf8; }
+
+.mic-buttons{ display:flex; gap:12px; width:100%; margin-bottom:12px; }
+.mic-buttons button{ flex:1; margin-bottom:0; }
+
+.audio-options{
+    background:#1e293b; border-radius:14px; padding:14px;
+    margin-bottom:14px; text-align:left;
+}
+
+.sensitivity-control label {
+    display: flex; flex-direction: column; gap: 6px;
+    font-size: 13px; color: #cbd5e1; margin-bottom: 12px;
+}
+.sensitivity-control label:last-child { margin-bottom: 0; }
+
+.flex-label { display: flex; justify-content: space-between; width: 100%; }
+.val-badge { color: #38bdf8; font-weight: bold; }
+
+input[type="range"] { width: 100%; accent-color: #38bdf8; cursor: pointer; }
+
+
+.documentation{
+    margin:14px 0; text-align:left; background:#111827; border:1px solid #334155;
+    border-radius:16px; overflow:hidden;
+}
+.documentation summary{
+    padding:15px 16px; cursor:pointer; font-weight:700; color:#38bdf8;
+    user-select:none;
+}
+.documentation-content{padding:0 16px 16px; color:#e2e8f0; font-size:14px; line-height:1.55;}
+.documentation-content h2{font-size:17px; color:#fff; margin:14px 0 8px;}
+.documentation-content h3{font-size:15px; color:#7dd3fc; margin:14px 0 5px;}
+.documentation-content p{margin:5px 0 9px;}
+.documentation-content ul{margin:5px 0 10px; padding-left:20px;}
+.documentation-content li{margin:4px 0;}
+.documentation-content code{background:#0f172a; padding:2px 5px; border-radius:5px; color:#f8fafc;}
+.doc-note{background:#0f172a; border-left:3px solid #38bdf8; padding:9px 10px; margin:10px 0; border-radius:6px;}
+.doc-warning{background:#291a12; border-left:3px solid #fb923c; padding:9px 10px; margin:10px 0; border-radius:6px;}
+.doc-table{width:100%; border-collapse:collapse; margin:9px 0 12px; font-size:13px;}
+.doc-table th,.doc-table td{border:1px solid #334155; padding:7px; vertical-align:top;}
+.doc-table th{background:#1e293b; color:#fff;}
+
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <h1>Live Translation - Speaker</h1>
+
+    <select id="micSelect">
+        <option value="">Loading microphones...</option>
+    </select>
+
+    <!-- Visual Meters -->
+    <div class="audio-options">
+        <div class="sensitivity-control">
+            <div class="meter-group">
+                <div class="meter-label">
+                    <span>Current Input:</span>
+                    <span id="volVal">0%</span>
+                </div>
+                <div class="meter-container">
+                    <div id="meterFill" class="meter-fill"></div>
+                </div>
+                <div class="flex-label" style="font-size:12px;color:#94a3b8;">
+                    <span>Dynamic threshold: <strong id="dynamicThresholdVal">0%</strong></span>
+                    <span>Voice band: <strong id="voiceBandLiveVal">0%</strong></span>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <button id="refreshMicsBtn">Refresh Microphones</button>
+
+    <div class="audio-options">
+        <div class="sensitivity-control">
+            <label>
+                <div class="flex-label">
+                    <span>1. Current Input threshold:</span>
+                    <span id="thresholdVal" class="val-badge">100%</span>
+                </div>
+                <input type="range" id="thresholdSlider" min="10" max="300" value="100" step="1">
+            </label>
+
+            <label>
+                <div class="flex-label">
+                    <span>2. Voice rise above recent floor:</span>
+                    <span id="riseVal" class="val-badge">20%</span>
+                </div>
+                <input type="range" id="riseSlider" min="5" max="100" value="20" step="1">
+            </label>
+
+            <label>
+                <div class="flex-label">
+                    <span>3. Dynamic floor margin:</span>
+                    <span id="floorMarginVal" class="val-badge">80%</span>
+                </div>
+                <input type="range" id="floorMarginSlider" min="10" max="200" value="80" step="5">
+            </label>
+
+            <label>
+                <div class="flex-label">
+                    <span>4. Minimum voice-band ratio:</span>
+                    <span id="voiceBandVal" class="val-badge">45%</span>
+                </div>
+                <input type="range" id="voiceBandSlider" min="10" max="90" value="45" step="1">
+            </label>
+
+            <label>
+                <div class="flex-label">
+                    <span>5. Minimum voice duration:</span>
+                    <span id="minVoiceVal" class="val-badge">175ms</span>
+                </div>
+                <input type="range" id="minVoiceSlider" min="50" max="500" value="175" step="25">
+            </label>
+
+            <label>
+                <div class="flex-label">
+                    <span>6. Consecutive trigger frames:</span>
+                    <span id="confirmFramesVal" class="val-badge">6</span>
+                </div>
+                <input type="range" id="confirmFramesSlider" min="1" max="20" value="6" step="1">
+            </label>
+
+            <label>
+                <div class="flex-label">
+                    <span>7. Stay-open threshold:</span>
+                    <span id="stayOpenVal" class="val-badge">100%</span>
+                </div>
+                <input type="range" id="stayOpenSlider" min="10" max="250" value="100" step="1">
+            </label>
+
+            <label>
+                <div class="flex-label">
+                    <span>8. Hold after last voice:</span> 
+                    <span id="proxRatioVal" class="val-badge">120ms</span>
+                </div>
+                <input type="range" id="proxRatioSlider" min="0" max="1000" value="120" step="20">
+            </label>
+
+            <label>
+                <div class="flex-label">
+                    <span>9. Re-open lockout:</span>
+                    <span id="lockoutVal" class="val-badge">300ms</span>
+                </div>
+                <input type="range" id="lockoutSlider" min="0" max="1000" value="300" step="50">
+            </label>
+
+            <label>
+                <div class="flex-label">
+                    <span>10. Polling interval:</span>
+                    <span id="pollingVal" class="val-badge">25ms</span>
+                </div>
+                <input type="range" id="pollingSlider" min="10" max="50" value="25" step="1">
+            </label>
+
+            <label>
+                <div class="flex-label">
+                    <span>11. Look-ahead delay:</span>
+                    <span id="lookAheadVal" class="val-badge">300ms</span>
+                </div>
+                <input type="range" id="lookAheadSlider" min="100" max="600" value="300" step="10">
+            </label>
+
+            <div class="flex-label" style="font-size:13px;color:#cbd5e1;margin-top:4px;">
+                <span>Estimated trigger time:</span>
+                <span id="estimatedTriggerVal" class="val-badge">175ms</span>
+            </div>
+
+            <button id="resetGateBtn" type="button">Reset to Recommended</button>
+        </div>
+    </div>
+
+    <details class="documentation">
+        <summary>Οδηγίες ρύθμισης του Gate</summary>
+        <div class="documentation-content">
+            <p>Η έκδοση αυτή είναι προσαρμοσμένη για μικρόφωνο με <strong>AGC / noise suppression</strong>.</p>
+            <div class="doc-note"><strong>Το gate ανοίγει μόνο όταν ισχύουν όλα:</strong><br>η ένταση περνά το δυναμικό όριο, υπάρχει αρκετή απότομη άνοδος, το φάσμα μοιάζει με ανθρώπινη φωνή και οι συνθήκες παραμένουν αληθείς για την ελάχιστη διάρκεια.</div>
+            <h3>Dynamic floor</h3>
+            <p>Το σύστημα μαθαίνει αργά το επίπεδο της σάλας. Το πραγματικό όριο είναι το μεγαλύτερο μεταξύ του Current Input Threshold και του επιπέδου σάλας συν το Dynamic Floor Margin.</p>
+            <h3>Voice-band ratio</h3>
+            <p>Ελέγχει πόση ενέργεια βρίσκεται περίπου στα 250–4.000 Hz. Βοηθά να απορρίπτονται χτυπήματα, βόμβοι και ήχοι που δεν μοιάζουν με ομιλία.</p>
+            <h3>Minimum duration και Trigger Frames</h3>
+            <p>Και τα δύο πρέπει να συμπληρωθούν συνεχόμενα. Δεν χρησιμοποιείται πλέον onset latch που θα μπορούσε να μετατρέψει μία στιγμιαία αιχμή σε άνοιγμα.</p>
+            <h3>Re-open lockout</h3>
+            <p>Μετά το κλείσιμο το gate αγνοεί για λίγο νέα triggers, ώστε να μην ξανανοίγει από την ουρά της αίθουσας ή από την αντίδραση του AGC.</p>
+            <div class="doc-warning"><strong>Προτεινόμενη αρχική δοκιμή:</strong> Input 150%, Voice Rise 60%, Floor Margin 80%, Voice Band 45%, Minimum Duration 175ms, Frames 6, Stay Open 100%, Hold 120ms, Lockout 300ms, Polling 25ms, Look-ahead 300ms.</div>
+        </div>
+    </details>
+
+    <button id="startBtn" disabled>Start</button>
+
+    <div class="mic-buttons">
+        <button id="pauseBtn" disabled>Pause Mic</button>
+        <button id="resumeBtn" disabled>Resume</button>
+    </div>
+
+    <button id="disconnectBtn" disabled>Disconnect</button>
+
+    <div id="status">Ready</div>
+
+</div>
+
+<script src="config.js"></script>
+<script>
+const LIVEKIT_URL = `ws://${SERVER_IP}:7880`;
+const ROOM_NAME = 'translation-room';
+
+const statusDiv = document.getElementById('status');
+const meterFill = document.getElementById('meterFill');
+const volVal = document.getElementById('volVal');
+const dynamicThresholdVal = document.getElementById('dynamicThresholdVal');
+const voiceBandLiveVal = document.getElementById('voiceBandLiveVal');
+
+const micSelect = document.getElementById('micSelect');
+const refreshMicsBtn = document.getElementById('refreshMicsBtn');
+const startBtn = document.getElementById('startBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const resumeBtn = document.getElementById('resumeBtn');
+const disconnectBtn = document.getElementById('disconnectBtn');
+
+const thresholdSlider = document.getElementById('thresholdSlider');
+const thresholdVal = document.getElementById('thresholdVal');
+const riseSlider = document.getElementById('riseSlider');
+const riseVal = document.getElementById('riseVal');
+const floorMarginSlider = document.getElementById('floorMarginSlider');
+const floorMarginVal = document.getElementById('floorMarginVal');
+const voiceBandSlider = document.getElementById('voiceBandSlider');
+const voiceBandVal = document.getElementById('voiceBandVal');
+const minVoiceSlider = document.getElementById('minVoiceSlider');
+const minVoiceVal = document.getElementById('minVoiceVal');
+const stayOpenSlider = document.getElementById('stayOpenSlider');
+const stayOpenVal = document.getElementById('stayOpenVal');
+const confirmFramesSlider = document.getElementById('confirmFramesSlider');
+const confirmFramesVal = document.getElementById('confirmFramesVal');
+const proxRatioSlider = document.getElementById('proxRatioSlider');
+const proxRatioVal = document.getElementById('proxRatioVal');
+const lockoutSlider = document.getElementById('lockoutSlider');
+const lockoutVal = document.getElementById('lockoutVal');
+const pollingSlider = document.getElementById('pollingSlider');
+const pollingVal = document.getElementById('pollingVal');
+const lookAheadSlider = document.getElementById('lookAheadSlider');
+const lookAheadVal = document.getElementById('lookAheadVal');
+const estimatedTriggerVal = document.getElementById('estimatedTriggerVal');
+const resetGateBtn = document.getElementById('resetGateBtn');
+
+function updateStartButton() {
+    startBtn.disabled = !micSelect.value;
+}
+
+micSelect.addEventListener('change', updateStartButton);
+
+let room = null;
+let audioTrack = null;
+let currentRawStream = null; 
+let audioContext = null;
+
+let proxGateNode = null;
+let masterGateNode = null;
+let vadTimerId = null;
+let lookAheadDelayNode = null;
+
+let isSpeakingState = false;
+let lastSpeechTime = 0;
+
+thresholdSlider.oninput = () => {
+    thresholdVal.textContent = Math.round(Number(thresholdSlider.value)) + '%';
+};
+
+riseSlider.oninput = () => {
+    riseVal.textContent = Math.round(Number(riseSlider.value)) + '%';
+};
+
+floorMarginSlider.oninput = () => {
+    floorMarginVal.textContent = Math.round(Number(floorMarginSlider.value)) + '%';
+};
+
+voiceBandSlider.oninput = () => {
+    voiceBandVal.textContent = Math.round(Number(voiceBandSlider.value)) + '%';
+};
+
+minVoiceSlider.oninput = () => {
+    minVoiceVal.textContent = Math.round(Number(minVoiceSlider.value)) + 'ms';
+};
+
+stayOpenSlider.oninput = () => {
+    stayOpenVal.textContent = Math.round(Number(stayOpenSlider.value)) + '%';
+};
+
+confirmFramesSlider.oninput = () => {
+    confirmFramesVal.textContent = Math.round(Number(confirmFramesSlider.value));
+};
+
+proxRatioSlider.oninput = () => {
+    const holdMs = Math.round(Number(proxRatioSlider.value));
+    proxRatioVal.textContent = holdMs < 1000
+        ? holdMs + 'ms'
+        : (holdMs / 1000).toFixed(2).replace(/\.?0+$/, '') + 's';
+};
+
+function updateEstimatedTriggerTime() {
+    const framesTime = Number(confirmFramesSlider.value) * Number(pollingSlider.value);
+    const minimumTime = Number(minVoiceSlider.value);
+    estimatedTriggerVal.textContent = Math.max(framesTime, minimumTime) + 'ms';
+}
+
+pollingSlider.oninput = () => {
+    pollingVal.textContent = Math.round(Number(pollingSlider.value)) + 'ms';
+    updateEstimatedTriggerTime();
+};
+
+lockoutSlider.oninput = () => {
+    lockoutVal.textContent = Math.round(Number(lockoutSlider.value)) + 'ms';
+};
+
+lookAheadSlider.oninput = () => {
+    const lookAheadMs = Math.round(Number(lookAheadSlider.value));
+    lookAheadVal.textContent = lookAheadMs + 'ms';
+
+    if (lookAheadDelayNode && audioContext) {
+        lookAheadDelayNode.delayTime.setValueAtTime(
+            lookAheadMs / 1000,
+            audioContext.currentTime
+        );
+    }
+};
+
+const originalMinVoiceInput = minVoiceSlider.oninput;
+minVoiceSlider.oninput = () => {
+    originalMinVoiceInput();
+    updateEstimatedTriggerTime();
+};
+
+const originalConfirmFramesInput = confirmFramesSlider.oninput;
+confirmFramesSlider.oninput = () => {
+    originalConfirmFramesInput();
+    updateEstimatedTriggerTime();
+};
+
+resetGateBtn.onclick = () => {
+    thresholdSlider.value = 150;
+    riseSlider.value = 60;
+    floorMarginSlider.value = 80;
+    voiceBandSlider.value = 45;
+    minVoiceSlider.value = 175;
+    confirmFramesSlider.value = 6;
+    stayOpenSlider.value = 100;
+    proxRatioSlider.value = 120;
+    lockoutSlider.value = 300;
+    pollingSlider.value = 25;
+    lookAheadSlider.value = 300;
+
+    thresholdSlider.oninput();
+    riseSlider.oninput();
+    floorMarginSlider.oninput();
+    voiceBandSlider.oninput();
+    minVoiceSlider.oninput();
+    confirmFramesSlider.oninput();
+    stayOpenSlider.oninput();
+    proxRatioSlider.oninput();
+    lockoutSlider.oninput();
+    pollingSlider.oninput();
+    lookAheadSlider.oninput();
+};
+
+thresholdSlider.oninput();
+riseSlider.oninput();
+floorMarginSlider.oninput();
+voiceBandSlider.oninput();
+minVoiceSlider.oninput();
+stayOpenSlider.oninput();
+confirmFramesSlider.oninput();
+proxRatioSlider.oninput();
+lockoutSlider.oninput();
+pollingSlider.oninput();
+lookAheadSlider.oninput();
+
+// ------------------------------------
+// TRIGGER GATE DSP PIPELINE
+// ------------------------------------
+function setupAudioPipelineAndVad(stream) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(stream);
+
+    // Κόβει υπόκωφους θορύβους και κραδασμούς.
+    const rumbleFilter = audioContext.createBiquadFilter();
+    rumbleFilter.type = 'highpass';
+    rumbleFilter.frequency.value = 100;
+    rumbleFilter.Q.value = 0.7;
+
+    // Ήπιο low-pass για να μειώνει hiss χωρίς να χαλάει την ομιλία.
+    const speechFilter = audioContext.createBiquadFilter();
+    speechFilter.type = 'lowpass';
+    speechFilter.frequency.value = 7500;
+    speechFilter.Q.value = 0.7;
+
+    const mainAnalyser = audioContext.createAnalyser();
+    mainAnalyser.fftSize = 512;
+    mainAnalyser.smoothingTimeConstant = 0.15;
+
+    // Gate εξόδου.
+    masterGateNode = audioContext.createGain();
+    masterGateNode.gain.value = 0.0001;
+
+    // Διατηρείται για συμβατότητα με τον υπόλοιπο κώδικα.
+    proxGateNode = audioContext.createGain();
+    proxGateNode.gain.value = 1.0;
+
+    // Look-ahead ώστε να μη χάνεται η αρχή της πρώτης λέξης.
+    lookAheadDelayNode = audioContext.createDelay(0.5);
+    lookAheadDelayNode.delayTime.value = Number(lookAheadSlider.value) / 1000;
+
+    const destinationBus = audioContext.createMediaStreamDestination();
+
+    source.connect(rumbleFilter);
+    rumbleFilter.connect(speechFilter);
+
+    // Ανάλυση πριν από το gate.
+    speechFilter.connect(mainAnalyser);
+
+    // Διαδρομή ήχου προς LiveKit.
+    speechFilter.connect(lookAheadDelayNode);
+    lookAheadDelayNode.connect(proxGateNode);
+    proxGateNode.connect(masterGateNode);
+    masterGateNode.connect(destinationBus);
+
+    const mainData = new Float32Array(mainAnalyser.fftSize);
+    const frequencyData = new Uint8Array(mainAnalyser.frequencyBinCount);
+
+    let triggerFrames = 0;
+    let candidateStartedAt = 0;
+    let lastTriggerTime = 0;
+    let recentFloorPercent = 0;
+    let lockoutUntil = 0;
+
+    function getRMS(data) {
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+            sum += data[i] * data[i];
+        }
+        return Math.sqrt(sum / data.length);
+    }
+
+    function openGate() {
+        if (isSpeakingState) return;
+
+        isSpeakingState = true;
+        const t = audioContext.currentTime;
+        masterGateNode.gain.cancelScheduledValues(t);
+        masterGateNode.gain.setTargetAtTime(1.0, t, 0.003);
+        broadcastSpeakingState(true);
+    }
+
+    function closeGate() {
+        if (!isSpeakingState) return;
+
+        isSpeakingState = false;
+        const t = audioContext.currentTime;
+        masterGateNode.gain.cancelScheduledValues(t);
+        masterGateNode.gain.setTargetAtTime(0.0001, t, 0.020);
+        broadcastSpeakingState(false);
+    }
+
+    function getVoiceBandRatio() {
+        mainAnalyser.getByteFrequencyData(frequencyData);
+
+        const nyquist = audioContext.sampleRate / 2;
+        let voiceEnergy = 0;
+        let totalEnergy = 0;
+
+        for (let i = 1; i < frequencyData.length; i++) {
+            const frequency = (i / frequencyData.length) * nyquist;
+            if (frequency < 100 || frequency > 7500) continue;
+
+            const magnitude = frequencyData[i] / 255;
+            const energy = magnitude * magnitude;
+            totalEnergy += energy;
+
+            if (frequency >= 250 && frequency <= 4000) {
+                voiceEnergy += energy;
+            }
+        }
+
+        return totalEnergy > 0.000001 ? (voiceEnergy / totalEnergy) * 100 : 0;
+    }
+
+    function processAudioFrame() {
+        if (!room || room.state !== 'connected') return;
+
+        mainAnalyser.getFloatTimeDomainData(mainData);
+        const mainEnergy = getRMS(mainData);
+        const voiceBandRatio = getVoiceBandRatio();
+        const now = performance.now();
+
+        // RMS 0.25 = 100%, RMS 0.50 = 200%, RMS 1.00 = 400%.
+        const currentPercent = (mainEnergy / 0.25) * 100;
+        const manualThreshold = Number(thresholdSlider.value);
+        const requiredRisePercent = Number(riseSlider.value);
+        const floorMarginPercent = Number(floorMarginSlider.value);
+        const minimumVoiceBandRatio = Number(voiceBandSlider.value);
+        const minimumVoiceDurationMs = Number(minVoiceSlider.value);
+        const requiredFrames = Number(confirmFramesSlider.value);
+        const stayOpenThresholdPercent = Number(stayOpenSlider.value);
+        const holdAfterMs = Number(proxRatioSlider.value);
+        const lockoutMs = Number(lockoutSlider.value);
+
+        // Μαθαίνει αργά το επίπεδο της σάλας μόνο όταν το gate είναι κλειστό.
+        // Η άνοδος είναι πολύ αργή ώστε δυνατές αιχμές να μη γίνονται αμέσως baseline.
+        if (!isSpeakingState && now >= lockoutUntil) {
+            if (recentFloorPercent === 0) {
+                recentFloorPercent = currentPercent;
+            } else {
+                const alpha = currentPercent < recentFloorPercent ? 0.10 : 0.004;
+                recentFloorPercent += alpha * (currentPercent - recentFloorPercent);
+            }
+        }
+
+        const dynamicThreshold = Math.max(
+            manualThreshold,
+            recentFloorPercent + floorMarginPercent
+        );
+        const riseAboveFloor = currentPercent - recentFloorPercent;
+
+        const validOpenFrame =
+            now >= lockoutUntil &&
+            currentPercent > dynamicThreshold &&
+            riseAboveFloor >= requiredRisePercent &&
+            voiceBandRatio >= minimumVoiceBandRatio;
+
+        if (!isSpeakingState) {
+            if (validOpenFrame) {
+                if (candidateStartedAt === 0) candidateStartedAt = now;
+                triggerFrames++;
+
+                const durationConfirmed =
+                    (now - candidateStartedAt) >= minimumVoiceDurationMs;
+                const framesConfirmed = triggerFrames >= requiredFrames;
+
+                if (durationConfirmed && framesConfirmed) {
+                    openGate();
+                    lastTriggerTime = now;
+                    triggerFrames = 0;
+                    candidateStartedAt = 0;
+                    statusDiv.textContent = 'Streaming LIVE — close speaker detected';
+                }
+            } else {
+                // Αυστηρά συνεχόμενη επιβεβαίωση: μία αποτυχημένη μέτρηση μηδενίζει το trigger.
+                triggerFrames = 0;
+                candidateStartedAt = 0;
+            }
+        } else {
+            // Το gate μένει ανοικτό με χαμηλότερο όριο. Δεν απαιτούμε νέο rise,
+            // επειδή το AGC μπορεί να συμπιέζει τη φωνή μετά την έναρξη.
+            if (currentPercent > stayOpenThresholdPercent) {
+                lastTriggerTime = now;
+            }
+
+            if (lastTriggerTime > 0 && (now - lastTriggerTime) > holdAfterMs) {
+                closeGate();
+                lockoutUntil = now + lockoutMs;
+                triggerFrames = 0;
+                candidateStartedAt = 0;
+                recentFloorPercent = currentPercent;
+                statusDiv.textContent = 'Streaming LIVE — waiting for close speaker';
+            }
+        }
+
+        const roundedCurrent = Math.round(currentPercent);
+        volVal.textContent = roundedCurrent + '%';
+        dynamicThresholdVal.textContent = Math.round(dynamicThreshold) + '%';
+        voiceBandLiveVal.textContent = Math.round(voiceBandRatio) + '%';
+        meterFill.style.width = Math.min(roundedCurrent, 100) + '%';
+
+        vadTimerId = window.setTimeout(
+            processAudioFrame,
+            Number(pollingSlider.value)
+        );
+    }
+
+    processAudioFrame();
+    return destinationBus.stream;
+}
+
+function broadcastSpeakingState(isSpeaking) {
+    if (room && room.state === 'connected') {
+        const payload = new TextEncoder().encode(JSON.stringify({
+            event: 'SPEAKER_VAD',
+            speaking: isSpeaking
+        }));
+        
+        room.localParticipant.publishData(payload, LivekitClient.DataPacket_Kind.RELIABLE);
+    }
+}
+
+// ------------------------------------
+// LOAD MICROPHONES
+// ------------------------------------
+async function loadMicrophones() {
+    try {
+        statusDiv.textContent = 'Loading microphones...';
+        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tempStream.getTracks().forEach(track => track.stop());
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const mics = devices.filter(device => device.kind === 'audioinput');
+        micSelect.innerHTML = '<option value="">Select microphone...</option>';
+
+        if (!mics.length) {
+            micSelect.innerHTML = '<option value="">No microphones found</option>';
+            statusDiv.textContent = 'No microphones found';
+            updateStartButton();
+            return;
+        }
+
+        mics.forEach((device, index) => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.textContent = device.label || `Microphone ${index + 1}`;
+            micSelect.appendChild(option);
+        });
+
+        statusDiv.textContent = 'Microphones loaded.';
+        updateStartButton();
+    } catch(err) {
+        console.error(err);
+        statusDiv.textContent = 'Microphone permission required';
+        updateStartButton();
+    }
+}
+
+refreshMicsBtn.onclick = loadMicrophones;
+window.addEventListener('load', loadMicrophones);
+
+// ------------------------------------
+// START & CONNECT
+// ------------------------------------
+startBtn.onclick = async () => {
+    if (!micSelect.value) {
+        updateStartButton();
+        statusDiv.textContent = 'Select a microphone first';
+        return;
+    }
+
+    try {
+        startBtn.disabled = true;
+        statusDiv.textContent = 'Getting token...';
+
+        const response = await fetch(`/token?room=${ROOM_NAME}&identity=speaker`);
+        if (!response.ok) throw new Error('Token request failed');
+        const data = await response.json();
+
+        room = new LivekitClient.Room();
+        statusDiv.textContent = 'Connecting...';
+        await room.connect(LIVEKIT_URL, data.token);
+
+        const selectedMicId = micSelect.value;
+        statusDiv.textContent = 'Opening microphone...';
+
+        const audioOptions = {
+            deviceId: selectedMicId || undefined,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+        };
+
+        currentRawStream = await navigator.mediaDevices.getUserMedia({ audio: audioOptions });
+
+        const gatedStream = setupAudioPipelineAndVad(currentRawStream);
+        const gatedTrack = gatedStream.getAudioTracks()[0];
+
+        audioTrack = new LivekitClient.LocalAudioTrack(gatedTrack);
+        await room.localParticipant.publishTrack(audioTrack);
+
+        statusDiv.textContent = 'Streaming LIVE — waiting for speaker';
+        pauseBtn.disabled = false;
+        disconnectBtn.disabled = false;
+        micSelect.disabled = true;
+
+    } catch(err) {
+        console.error(err);
+        statusDiv.textContent = 'ERROR: ' + err.message;
+        updateStartButton();
+        if (room) { room.disconnect(); room = null; }
+    }
+};
+
+// ------------------------------------
+// CONTROLS
+// ------------------------------------
+pauseBtn.onclick = async () => {
+    if (audioTrack) {
+        await audioTrack.mute();
+        statusDiv.textContent = 'Microphone paused';
+        pauseBtn.disabled = true;
+        resumeBtn.disabled = false;
+    }
+};
+
+resumeBtn.onclick = async () => {
+    if (audioTrack) {
+        await audioTrack.unmute();
+        statusDiv.textContent = 'Microphone resumed';
+        pauseBtn.disabled = false;
+        resumeBtn.disabled = true;
+    }
+};
+
+disconnectBtn.onclick = async () => {
+    if (vadTimerId) { clearTimeout(vadTimerId); vadTimerId = null; }
+    if (audioTrack) { audioTrack.stop(); audioTrack = null; }
+    if (currentRawStream) { currentRawStream.getTracks().forEach(t => t.stop()); currentRawStream = null; }
+    if (audioContext) { await audioContext.close(); audioContext = null; }
+    lookAheadDelayNode = null;
+    if (room) { room.disconnect(); room = null; }
+
+    meterFill.style.width = '0%';
+    volVal.textContent = '0%';
+    dynamicThresholdVal.textContent = '0%';
+    voiceBandLiveVal.textContent = '0%';
+    isSpeakingState = false;
+
+    statusDiv.textContent = 'Disconnected';
+    updateStartButton();
+    pauseBtn.disabled = true;
+    resumeBtn.disabled = true;
+    disconnectBtn.disabled = true;
+    micSelect.disabled = false;
+};
+</script>
+
+</body>
+</html>
